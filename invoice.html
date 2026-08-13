@@ -1,16 +1,22 @@
+```html
 <!doctype html>
 <html lang="zh-Hant">
   <head>
     <meta charset="utf-8" />
+
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
     />
+
     <title>掃描電子發票</title>
+
+    <!-- LINE LIFF SDK -->
     <script
       src="https://static.line-scdn.net/liff/edge/2/sdk.js"
       defer
     ></script>
+
     <style>
       :root {
         color-scheme: light;
@@ -176,43 +182,69 @@
         .grid {
           grid-template-columns: 1fr;
         }
+
         button {
           flex: 1 1 100%;
         }
       }
     </style>
   </head>
+
   <body>
     <main>
       <h1>掃描電子發票</h1>
+
       <section class="panel">
         <p id="status" class="status">初始化中...</p>
 
         <div class="grid">
-          <button type="button" id="scanLeft">掃左側 QR</button>
-          <button type="button" id="scanRight">掃右側 QR</button>
+          <button type="button" id="scanLeft">
+            掃左側 QR
+          </button>
+
+          <button type="button" id="scanRight">
+            掃右側 QR
+          </button>
         </div>
 
         <div id="cameraPanel" class="camera-panel" hidden>
           <video id="cameraVideo" playsinline muted></video>
+
           <canvas id="cameraCanvas" hidden></canvas>
+
           <div class="camera-actions">
-            <button type="button" id="stopCamera">停止相機</button>
+            <button type="button" id="stopCamera">
+              停止相機
+            </button>
           </div>
         </div>
 
         <label for="leftQr">左側 QR</label>
-        <textarea id="leftQr" autocomplete="off" spellcheck="false"></textarea>
+        <textarea
+          id="leftQr"
+          autocomplete="off"
+          spellcheck="false"
+        ></textarea>
 
         <label for="rightQr">右側 QR</label>
-        <textarea id="rightQr" autocomplete="off" spellcheck="false"></textarea>
+        <textarea
+          id="rightQr"
+          autocomplete="off"
+          spellcheck="false"
+        ></textarea>
 
         <div class="actions">
           <button type="button" class="primary" id="sendLine">
             送回 LINE 儲存
           </button>
-          <button type="button" id="copyCommand">複製指令</button>
-          <button type="button" id="clearAll">清除</button>
+
+          <button type="button" id="copyCommand">
+            複製指令
+          </button>
+
+          <button type="button" id="clearAll">
+            清除
+          </button>
         </div>
 
         <pre id="commandPreview" class="command"></pre>
@@ -220,59 +252,142 @@
     </main>
 
     <script>
-      const LIFF_ID = "<?= liffId ?>";
-      const COMMAND_PREFIX = "<?= commandPrefix ?>";
+      /*
+       * ==========================================
+       * GitHub Pages / LIFF 設定
+       * ==========================================
+       */
+
+      const LIFF_ID = "2011086046-2Koy79Is";
+      const COMMAND_PREFIX = "發票";
+
       const JSQR_URL =
         "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js";
+
       const SCRIPT_TIMEOUT_MS = 6000;
+
+      /*
+       * ==========================================
+       * State
+       * ==========================================
+       */
 
       const state = {
         liffReady: false,
+
         cameraTarget: null,
         cameraStream: null,
         cameraFrameId: 0,
+
         barcodeDetector: null,
         qrDecoderLoadPromise: null,
       };
 
-      const statusEl = document.getElementById("status");
-      const leftQrEl = document.getElementById("leftQr");
-      const rightQrEl = document.getElementById("rightQr");
-      const commandPreviewEl = document.getElementById("commandPreview");
-      const cameraPanelEl = document.getElementById("cameraPanel");
-      const cameraVideoEl = document.getElementById("cameraVideo");
-      const cameraCanvasEl = document.getElementById("cameraCanvas");
+      /*
+       * ==========================================
+       * DOM
+       * ==========================================
+       */
 
-      function setStatus(text, isWarn) {
+      const statusEl =
+        document.getElementById("status");
+
+      const leftQrEl =
+        document.getElementById("leftQr");
+
+      const rightQrEl =
+        document.getElementById("rightQr");
+
+      const commandPreviewEl =
+        document.getElementById("commandPreview");
+
+      const cameraPanelEl =
+        document.getElementById("cameraPanel");
+
+      const cameraVideoEl =
+        document.getElementById("cameraVideo");
+
+      const cameraCanvasEl =
+        document.getElementById("cameraCanvas");
+
+      /*
+       * ==========================================
+       * UI
+       * ==========================================
+       */
+
+      function setStatus(text, isWarn = false) {
         statusEl.textContent = text;
-        statusEl.className = isWarn ? "status warn" : "status";
+
+        statusEl.className = isWarn
+          ? "status warn"
+          : "status";
       }
 
       function buildCommand() {
         const left = leftQrEl.value.trim();
         const right = rightQrEl.value.trim();
-        return [COMMAND_PREFIX, left, right].filter(Boolean).join("\n");
+
+        return [
+          COMMAND_PREFIX,
+          left,
+          right,
+        ]
+          .filter(Boolean)
+          .join("\n");
       }
 
       function updatePreview() {
-        commandPreviewEl.textContent = buildCommand();
+        commandPreviewEl.textContent =
+          buildCommand();
       }
 
+      /*
+       * ==========================================
+       * Generic script loader
+       * ==========================================
+       */
+
       function loadScript(src, id) {
-        const existing = document.getElementById(id);
-        if (existing && existing.dataset.loaded === "true")
+        const existing =
+          document.getElementById(id);
+
+        if (
+          existing &&
+          existing.dataset.loaded === "true"
+        ) {
           return Promise.resolve();
-        if (existing && existing.dataset.loading === "true") {
+        }
+
+        if (
+          existing &&
+          existing.dataset.loading === "true"
+        ) {
           return new Promise((resolve, reject) => {
-            existing.addEventListener("load", resolve, { once: true });
-            existing.addEventListener("error", reject, { once: true });
+            existing.addEventListener(
+              "load",
+              resolve,
+              { once: true }
+            );
+
+            existing.addEventListener(
+              "error",
+              reject,
+              { once: true }
+            );
           });
         }
-        if (existing) existing.remove();
+
+        if (existing) {
+          existing.remove();
+        }
 
         return new Promise((resolve, reject) => {
-          const script = document.createElement("script");
+          const script =
+            document.createElement("script");
+
           let timeoutId = 0;
+
           script.id = id;
           script.src = src;
           script.async = true;
@@ -280,307 +395,838 @@
 
           script.onload = () => {
             window.clearTimeout(timeoutId);
+
             script.dataset.loaded = "true";
             script.dataset.loading = "false";
+
             resolve();
           };
+
           script.onerror = () => {
             window.clearTimeout(timeoutId);
+
             script.dataset.loading = "false";
-            reject(new Error("載入失敗: " + src));
+
+            reject(
+              new Error(
+                "載入失敗: " + src
+              )
+            );
           };
-          timeoutId = window.setTimeout(() => {
-            script.dataset.loading = "false";
-            reject(new Error("載入逾時: " + src));
-          }, SCRIPT_TIMEOUT_MS);
+
+          timeoutId =
+            window.setTimeout(() => {
+              script.dataset.loading = "false";
+
+              reject(
+                new Error(
+                  "載入逾時: " + src
+                )
+              );
+            }, SCRIPT_TIMEOUT_MS);
 
           document.head.appendChild(script);
         });
       }
 
+      /*
+       * ==========================================
+       * jsQR
+       * ==========================================
+       */
+
       async function ensureQrDecoderLoaded() {
-        if (typeof window.jsQR === "function") return true;
-        if (!state.qrDecoderLoadPromise) {
-          state.qrDecoderLoadPromise = loadScript(JSQR_URL, "jsqr-sdk");
+        if (
+          typeof window.jsQR === "function"
+        ) {
+          return true;
         }
+
+        if (
+          !state.qrDecoderLoadPromise
+        ) {
+          state.qrDecoderLoadPromise =
+            loadScript(
+              JSQR_URL,
+              "jsqr-sdk"
+            );
+        }
+
         try {
           await state.qrDecoderLoadPromise;
-          return typeof window.jsQR === "function";
-        } catch (e) {
+
+          return (
+            typeof window.jsQR ===
+            "function"
+          );
+        } catch (error) {
+          console.warn(
+            "jsQR 載入失敗",
+            error
+          );
+
           return false;
         }
       }
 
+      /*
+       * ==========================================
+       * LIFF
+       * ==========================================
+       */
+
       function isLiffScanAvailable() {
-        return (
-          state.liffReady &&
-          typeof window.liff !== "undefined" &&
-          typeof window.liff.scanCodeV2 === "function" &&
-          (!window.liff.isApiAvailable ||
-            window.liff.isApiAvailable("scanCodeV2"))
-        );
+        if (!state.liffReady) {
+          return false;
+        }
+
+        if (!window.liff) {
+          return false;
+        }
+
+        if (
+          typeof window.liff.isInClient ===
+          "function" &&
+          !window.liff.isInClient()
+        ) {
+          return false;
+        }
+
+        if (
+          typeof window.liff.scanCodeV2 !==
+          "function"
+        ) {
+          return false;
+        }
+
+        if (
+          typeof window.liff
+            .isApiAvailable ===
+            "function" &&
+          !window.liff.isApiAvailable(
+            "scanCodeV2"
+          )
+        ) {
+          return false;
+        }
+
+        return true;
+      }
+
+      async function waitForLiffSdk() {
+        for (let i = 0; i < 60; i++) {
+          if (
+            window.liff &&
+            typeof window.liff.init ===
+              "function"
+          ) {
+            return true;
+          }
+
+          await new Promise(
+            (resolve) =>
+              setTimeout(resolve, 100)
+          );
+        }
+
+        return false;
       }
 
       async function initLiff() {
         updatePreview();
 
         if (!LIFF_ID) {
-          setStatus("未設定 LIFF ID。", true);
+          setStatus(
+            "未設定 LIFF ID。",
+            true
+          );
           return;
         }
 
         setStatus("等待 LIFF SDK...");
 
         try {
-          // 等待 SDK 載入
-          for (let i = 0; i < 60; i++) {
-            if (window.liff) {
-              break;
-            }
+          /*
+           * LIFF SDK 由 <head> 的 defer script 載入。
+           * 這裡只等待它出現，不再次動態載入。
+           */
 
-            await new Promise((resolve) => setTimeout(resolve, 100));
+          const sdkReady =
+            await waitForLiffSdk();
+
+          if (!sdkReady) {
+            throw new Error(
+              "LIFF SDK 載入失敗"
+            );
           }
 
-          if (!window.liff) {
-            throw new Error("LIFF SDK 載入失敗");
-          }
+          const sdkVersion =
+            window.liff.getVersion();
 
-          setStatus("LIFF SDK 已載入，版本：" + window.liff.getVersion());
+          console.log(
+            "LIFF SDK version =",
+            sdkVersion
+          );
 
-          console.log("LIFF SDK version =", window.liff.getVersion());
-          console.log("LIFF_ID =", LIFF_ID);
-          console.log("location.href =", location.href);
-          console.log("location.origin =", location.origin);
+          console.log(
+            "LIFF_ID =",
+            LIFF_ID
+          );
 
-          setStatus("開始 liff.init()...");
+          console.log(
+            "location.href =",
+            location.href
+          );
+
+          console.log(
+            "location.origin =",
+            location.origin
+          );
+
+          setStatus(
+            "開始 liff.init()..."
+          );
 
           await window.liff.init({
             liffId: LIFF_ID,
           });
 
-          console.log("LIFF init success");
+          console.log(
+            "LIFF init success"
+          );
 
           state.liffReady = true;
 
-          console.log("liff.isInClient() =", window.liff.isInClient());
+          const inClient =
+            window.liff.isInClient();
 
-          console.log("scanCodeV2 function =", typeof window.liff.scanCodeV2);
+          console.log(
+            "liff.isInClient() =",
+            inClient
+          );
+
+          const scanFunction =
+            typeof window.liff
+              .scanCodeV2;
+
+          console.log(
+            "scanCodeV2 function =",
+            scanFunction
+          );
+
+          const scanAvailable =
+            typeof window.liff
+              .isApiAvailable ===
+            "function"
+              ? window.liff.isApiAvailable(
+                  "scanCodeV2"
+                )
+              : "unknown";
 
           console.log(
             "scanCodeV2 available =",
-            window.liff.isApiAvailable
-              ? window.liff.isApiAvailable("scanCodeV2")
-              : "unknown",
+            scanAvailable
           );
 
-          setStatus(
-            "LIFF 初始化完成，LINE Client = " + window.liff.isInClient(),
-          );
+          if (
+            inClient &&
+            scanFunction ===
+              "function" &&
+            scanAvailable === true
+          ) {
+            setStatus(
+              "Ready：LINE 掃描器可用"
+            );
+          } else if (inClient) {
+            setStatus(
+              "LIFF 已初始化，但 LINE 掃描器目前不可用。",
+              true
+            );
+          } else {
+            setStatus(
+              "LIFF 已初始化，目前不是 LINE Client，將使用瀏覽器相機。",
+              true
+            );
+          }
         } catch (error) {
-          console.error("LIFF Init Error:", error);
+          console.error(
+            "LIFF Init Error:",
+            error
+          );
+
+          console.error(
+            "LIFF error code =",
+            error?.code
+          );
+
+          console.error(
+            "LIFF error message =",
+            error?.message
+          );
+
+          state.liffReady = false;
 
           setStatus(
-            "LIFF 錯誤：" +
-              (error?.code || "") +
-              " " +
-              (error?.message || error),
-            true,
+            "LIFF 初始化失敗：" +
+              (error?.code
+                ? `[${error.code}] `
+                : "") +
+              (error?.message ||
+                error),
+            true
           );
         }
       }
 
+      /*
+       * ==========================================
+       * QR Scan
+       * ==========================================
+       */
+
       async function scanQr(target) {
+        /*
+         * 第一優先：LINE 內建 Scanner
+         */
+
         if (isLiffScanAvailable()) {
           try {
-            const result = await window.liff.scanCodeV2();
-            if (result && result.value) {
-              setQrValue(target, result.value);
+            setStatus(
+              "正在開啟 LINE 掃描器..."
+            );
+
+            const result =
+              await window.liff.scanCodeV2();
+
+            console.log(
+              "LINE Scan Result =",
+              result
+            );
+
+            if (
+              result &&
+              result.value
+            ) {
+              setQrValue(
+                target,
+                result.value
+              );
+            } else {
+              setStatus(
+                "LINE 掃描器沒有取得內容。",
+                true
+              );
             }
+
             return;
           } catch (error) {
-            setStatus("LINE 掃描器未開啟，改用網頁相機...", true);
+            console.error(
+              "LINE Scan Error:",
+              error
+            );
+
+            /*
+             * LINE Scanner 失敗才 fallback
+             * 到瀏覽器相機。
+             */
+            setStatus(
+              "LINE 掃描器開啟失敗，改用網頁相機...",
+              true
+            );
           }
         }
 
+        /*
+         * 非 LINE Client / Scanner 不可用：
+         * 使用瀏覽器相機。
+         */
         await startCameraScan(target);
       }
 
-      function setQrValue(target, value) {
+      function setQrValue(
+        target,
+        value
+      ) {
         target.value = value;
+
         updatePreview();
+
         stopCameraScan();
-        setStatus("已讀取 QR Code！");
+
+        setStatus(
+          "已讀取 QR Code！"
+        );
       }
 
-      async function startCameraScan(target) {
-        // 檢查環境
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-          setStatus("錯誤：相機 API 受限，請確認網頁是否已突破沙盒。", true);
+      /*
+       * ==========================================
+       * Browser Camera Fallback
+       * ==========================================
+       */
+
+      async function startCameraScan(
+        target
+      ) {
+        if (
+          !navigator.mediaDevices ||
+          !navigator.mediaDevices
+            .getUserMedia
+        ) {
+          setStatus(
+            "錯誤：此環境不支援相機 API。",
+            true
+          );
+
           return;
         }
 
         stopCameraScan();
-        state.cameraTarget = target;
-        setStatus("相機啟動中...");
 
-        const jsQROk = await ensureQrDecoderLoaded();
+        state.cameraTarget =
+          target;
+
+        setStatus(
+          "相機啟動中..."
+        );
+
+        await ensureQrDecoderLoaded();
+
+        /*
+         * BarcodeDetector
+         */
 
         try {
-          if ("BarcodeDetector" in window) {
-            state.barcodeDetector = new BarcodeDetector({
-              formats: ["qr_code"],
-            });
+          if (
+            "BarcodeDetector" in
+            window
+          ) {
+            state.barcodeDetector =
+              new BarcodeDetector({
+                formats: [
+                  "qr_code",
+                ],
+              });
           }
-        } catch (e) {
-          state.barcodeDetector = null;
+        } catch (error) {
+          state.barcodeDetector =
+            null;
         }
 
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: { ideal: "environment" } },
-            audio: false,
-          });
+        /*
+         * 開啟相機
+         */
 
-          state.cameraStream = stream;
-          cameraVideoEl.srcObject = stream;
-          cameraPanelEl.hidden = false;
+        try {
+          const stream =
+            await navigator.mediaDevices
+              .getUserMedia({
+                video: {
+                  facingMode: {
+                    ideal:
+                      "environment",
+                  },
+                },
+                audio: false,
+              });
+
+          state.cameraStream =
+            stream;
+
+          cameraVideoEl.srcObject =
+            stream;
+
+          cameraPanelEl.hidden =
+            false;
+
           await cameraVideoEl.play();
-          setStatus("請對準發票 QR Code");
+
+          setStatus(
+            "請對準發票 QR Code"
+          );
+
           scanCameraFrame();
         } catch (error) {
-          console.error("Camera Fail:", error);
-          setStatus(`相機啟動失敗 [${error.name}]: ${error.message}`, true);
+          console.error(
+            "Camera Fail:",
+            error
+          );
+
+          setStatus(
+            `相機啟動失敗 [${error.name}]: ${error.message}`,
+            true
+          );
         }
       }
 
       async function scanCameraFrame() {
-        if (!state.cameraStream || !state.cameraTarget) return;
+        if (
+          !state.cameraStream ||
+          !state.cameraTarget
+        ) {
+          return;
+        }
 
-        const video = cameraVideoEl;
-        if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-          const canvas = cameraCanvasEl;
-          const width = video.videoWidth;
-          const height = video.videoHeight;
+        const video =
+          cameraVideoEl;
 
-          if (width > 0 && height > 0) {
-            canvas.width = width;
-            canvas.height = height;
-            const context = canvas.getContext("2d", {
-              willReadFrequently: true,
-            });
-            context.drawImage(video, 0, 0, width, height);
+        if (
+          video.readyState >=
+          HTMLMediaElement.HAVE_CURRENT_DATA
+        ) {
+          const canvas =
+            cameraCanvasEl;
 
-            const value = await detectQrFromCanvas(
-              canvas,
-              context,
+          const width =
+            video.videoWidth;
+
+          const height =
+            video.videoHeight;
+
+          if (
+            width > 0 &&
+            height > 0
+          ) {
+            canvas.width =
+              width;
+
+            canvas.height =
+              height;
+
+            const context =
+              canvas.getContext(
+                "2d",
+                {
+                  willReadFrequently:
+                    true,
+                }
+              );
+
+            context.drawImage(
+              video,
+              0,
+              0,
               width,
-              height,
+              height
             );
+
+            const value =
+              await detectQrFromCanvas(
+                canvas,
+                context,
+                width,
+                height
+              );
+
             if (value) {
-              setQrValue(state.cameraTarget, value);
+              setQrValue(
+                state.cameraTarget,
+                value
+              );
+
               return;
             }
           }
         }
 
-        state.cameraFrameId = window.requestAnimationFrame(scanCameraFrame);
+        state.cameraFrameId =
+          window.requestAnimationFrame(
+            scanCameraFrame
+          );
       }
 
-      async function detectQrFromCanvas(canvas, context, width, height) {
-        if (state.barcodeDetector) {
+      async function detectQrFromCanvas(
+        canvas,
+        context,
+        width,
+        height
+      ) {
+        /*
+         * 優先 BarcodeDetector
+         */
+
+        if (
+          state.barcodeDetector
+        ) {
           try {
-            const codes = await state.barcodeDetector.detect(canvas);
-            if (codes && codes.length > 0 && codes[0].rawValue) {
-              return codes[0].rawValue;
+            const codes =
+              await state.barcodeDetector.detect(
+                canvas
+              );
+
+            if (
+              codes &&
+              codes.length > 0 &&
+              codes[0].rawValue
+            ) {
+              return codes[0]
+                .rawValue;
             }
-          } catch (e) {
-            state.barcodeDetector = null;
+          } catch (error) {
+            state.barcodeDetector =
+              null;
           }
         }
 
-        if (typeof window.jsQR === "function") {
-          const imageData = context.getImageData(0, 0, width, height);
-          const result = window.jsQR(imageData.data, width, height);
-          if (result && result.data) {
+        /*
+         * fallback jsQR
+         */
+
+        if (
+          typeof window.jsQR ===
+          "function"
+        ) {
+          const imageData =
+            context.getImageData(
+              0,
+              0,
+              width,
+              height
+            );
+
+          const result =
+            window.jsQR(
+              imageData.data,
+              width,
+              height
+            );
+
+          if (
+            result &&
+            result.data
+          ) {
             return result.data;
           }
         }
+
         return "";
       }
 
       function stopCameraScan() {
-        if (state.cameraFrameId) {
-          window.cancelAnimationFrame(state.cameraFrameId);
+        if (
+          state.cameraFrameId
+        ) {
+          window.cancelAnimationFrame(
+            state.cameraFrameId
+          );
+
           state.cameraFrameId = 0;
         }
-        if (state.cameraStream) {
-          state.cameraStream.getTracks().forEach((track) => track.stop());
-          state.cameraStream = null;
+
+        if (
+          state.cameraStream
+        ) {
+          state.cameraStream
+            .getTracks()
+            .forEach((track) =>
+              track.stop()
+            );
+
+          state.cameraStream =
+            null;
         }
-        state.cameraTarget = null;
-        cameraVideoEl.srcObject = null;
-        cameraPanelEl.hidden = true;
+
+        state.cameraTarget =
+          null;
+
+        cameraVideoEl.srcObject =
+          null;
+
+        cameraPanelEl.hidden =
+          true;
       }
+
+      /*
+       * ==========================================
+       * Send result back to LINE
+       * ==========================================
+       */
 
       async function sendToLine() {
-        const command = buildCommand();
-        if (!leftQrEl.value.trim()) {
-          setStatus("請先讀取或貼上左側 QR。", true);
+        const command =
+          buildCommand();
+
+        if (
+          !leftQrEl.value.trim()
+        ) {
+          setStatus(
+            "請先讀取或貼上左側 QR。",
+            true
+          );
+
           return;
         }
 
-        if (!state.liffReady || !window.liff.isInClient()) {
-          setStatus("無法直接傳送，請手動點擊「複製指令」。", true);
+        if (
+          !state.liffReady ||
+          !window.liff ||
+          !window.liff.isInClient()
+        ) {
+          setStatus(
+            "目前不是 LINE LIFF 環境，無法直接傳送。",
+            true
+          );
+
           return;
         }
 
         try {
-          await window.liff.sendMessages([{ type: "text", text: command }]);
+          await window.liff.sendMessages([
+            {
+              type: "text",
+              text: command,
+            },
+          ]);
+
           window.liff.closeWindow();
         } catch (error) {
-          setStatus("傳送失敗，請複製指令發送。", true);
+          console.error(
+            "sendMessages error:",
+            error
+          );
+
+          setStatus(
+            "傳送失敗，請複製指令發送。",
+            true
+          );
         }
       }
+
+      /*
+       * ==========================================
+       * Copy
+       * ==========================================
+       */
 
       async function copyCommand() {
-        const command = buildCommand();
-        if (!command.trim()) return;
+        const command =
+          buildCommand();
+
+        if (!command.trim()) {
+          return;
+        }
 
         try {
-          await navigator.clipboard.writeText(command);
-          setStatus("已複製至剪貼簿！");
+          await navigator.clipboard.writeText(
+            command
+          );
+
+          setStatus(
+            "已複製至剪貼簿！"
+          );
         } catch (error) {
-          setStatus("請手動選取下方文字複製。", true);
+          setStatus(
+            "請手動選取下方文字複製。",
+            true
+          );
         }
       }
 
-      // 事件綁定
-      document
-        .getElementById("scanLeft")
-        .addEventListener("click", () => scanQr(leftQrEl));
-      document
-        .getElementById("scanRight")
-        .addEventListener("click", () => scanQr(rightQrEl));
-      document.getElementById("sendLine").addEventListener("click", sendToLine);
-      document
-        .getElementById("copyCommand")
-        .addEventListener("click", copyCommand);
-      document.getElementById("stopCamera").addEventListener("click", () => {
-        stopCameraScan();
-        setStatus("相機已關閉");
-      });
-      document.getElementById("clearAll").addEventListener("click", () => {
-        stopCameraScan();
-        leftQrEl.value = "";
-        rightQrEl.value = "";
-        updatePreview();
-        setStatus("已清除");
-      });
-      leftQrEl.addEventListener("input", updatePreview);
-      rightQrEl.addEventListener("input", updatePreview);
+      /*
+       * ==========================================
+       * Events
+       * ==========================================
+       */
 
-      initLiff();
-      window.addEventListener("pagehide", stopCameraScan);
+      document
+        .getElementById(
+          "scanLeft"
+        )
+        .addEventListener(
+          "click",
+          () =>
+            scanQr(leftQrEl)
+        );
+
+      document
+        .getElementById(
+          "scanRight"
+        )
+        .addEventListener(
+          "click",
+          () =>
+            scanQr(rightQrEl)
+        );
+
+      document
+        .getElementById(
+          "sendLine"
+        )
+        .addEventListener(
+          "click",
+          sendToLine
+        );
+
+      document
+        .getElementById(
+          "copyCommand"
+        )
+        .addEventListener(
+          "click",
+          copyCommand
+        );
+
+      document
+        .getElementById(
+          "stopCamera"
+        )
+        .addEventListener(
+          "click",
+          () => {
+            stopCameraScan();
+            setStatus(
+              "相機已關閉"
+            );
+          }
+        );
+
+      document
+        .getElementById(
+          "clearAll"
+        )
+        .addEventListener(
+          "click",
+          () => {
+            stopCameraScan();
+
+            leftQrEl.value =
+              "";
+
+            rightQrEl.value =
+              "";
+
+            updatePreview();
+
+            setStatus(
+              "已清除"
+            );
+          }
+        );
+
+      leftQrEl.addEventListener(
+        "input",
+        updatePreview
+      );
+
+      rightQrEl.addEventListener(
+        "input",
+        updatePreview
+      );
+
+      /*
+       * ==========================================
+       * Start
+       * ==========================================
+       */
+
+      (async () => {
+        await initLiff();
+      })();
+
+      window.addEventListener(
+        "pagehide",
+        stopCameraScan
+      );
     </script>
   </body>
 </html>
+```
