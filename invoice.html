@@ -1,0 +1,586 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>掃描電子發票</title>
+    <script
+      src="https://static.line-scdn.net/liff/edge/2/sdk.js"
+      defer
+    ></script>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f7f8fb;
+        --panel: #ffffff;
+        --text: #172033;
+        --muted: #5d677a;
+        --line: #dce2ec;
+        --primary: #0f766e;
+        --primary-strong: #0b5f59;
+        --warn: #a16207;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: "Segoe UI", "Noto Sans TC", Arial, sans-serif;
+        line-height: 1.5;
+      }
+
+      main {
+        width: min(720px, calc(100% - 28px));
+        margin: 0 auto;
+        padding: 18px 0 28px;
+      }
+
+      h1 {
+        margin: 0 0 14px;
+        font-size: 24px;
+        line-height: 1.25;
+      }
+
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 16px;
+      }
+
+      .status {
+        min-height: 24px;
+        margin: 0 0 14px;
+        color: var(--muted);
+        font-size: 14px;
+        word-break: break-all;
+      }
+
+      .status.warn {
+        color: var(--warn);
+      }
+
+      label {
+        display: block;
+        margin: 14px 0 6px;
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      textarea {
+        display: block;
+        width: 100%;
+        min-height: 88px;
+        resize: vertical;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        padding: 10px;
+        color: var(--text);
+        font:
+          14px/1.45 Consolas,
+          "Courier New",
+          monospace;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+
+      .actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 16px;
+      }
+
+      button {
+        min-height: 42px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        padding: 0 14px;
+        background: #ffffff;
+        color: var(--text);
+        font-size: 15px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      button.primary {
+        border-color: var(--primary);
+        background: var(--primary);
+        color: #ffffff;
+      }
+
+      button.primary:active {
+        background: var(--primary-strong);
+      }
+
+      .command {
+        margin-top: 14px;
+        padding: 10px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: #f8fafc;
+        color: var(--muted);
+        font:
+          13px/1.45 Consolas,
+          "Courier New",
+          monospace;
+        white-space: pre-wrap;
+        word-break: break-all;
+      }
+
+      .camera-panel {
+        margin-top: 14px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        overflow: hidden;
+        background: #0f172a;
+      }
+
+      .camera-panel[hidden] {
+        display: none;
+      }
+
+      video {
+        display: block;
+        width: 100%;
+        aspect-ratio: 4 / 3;
+        object-fit: cover;
+        background: #0f172a;
+      }
+
+      .camera-actions {
+        display: flex;
+        justify-content: flex-end;
+        padding: 10px;
+        background: #ffffff;
+      }
+
+      @media (max-width: 540px) {
+        main {
+          width: min(100% - 20px, 720px);
+          padding-top: 14px;
+        }
+
+        .grid {
+          grid-template-columns: 1fr;
+        }
+        button {
+          flex: 1 1 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>掃描電子發票</h1>
+      <section class="panel">
+        <p id="status" class="status">初始化中...</p>
+
+        <div class="grid">
+          <button type="button" id="scanLeft">掃左側 QR</button>
+          <button type="button" id="scanRight">掃右側 QR</button>
+        </div>
+
+        <div id="cameraPanel" class="camera-panel" hidden>
+          <video id="cameraVideo" playsinline muted></video>
+          <canvas id="cameraCanvas" hidden></canvas>
+          <div class="camera-actions">
+            <button type="button" id="stopCamera">停止相機</button>
+          </div>
+        </div>
+
+        <label for="leftQr">左側 QR</label>
+        <textarea id="leftQr" autocomplete="off" spellcheck="false"></textarea>
+
+        <label for="rightQr">右側 QR</label>
+        <textarea id="rightQr" autocomplete="off" spellcheck="false"></textarea>
+
+        <div class="actions">
+          <button type="button" class="primary" id="sendLine">
+            送回 LINE 儲存
+          </button>
+          <button type="button" id="copyCommand">複製指令</button>
+          <button type="button" id="clearAll">清除</button>
+        </div>
+
+        <pre id="commandPreview" class="command"></pre>
+      </section>
+    </main>
+
+    <script>
+      const LIFF_ID = "<?= liffId ?>";
+      const COMMAND_PREFIX = "<?= commandPrefix ?>";
+      const JSQR_URL =
+        "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js";
+      const SCRIPT_TIMEOUT_MS = 6000;
+
+      const state = {
+        liffReady: false,
+        cameraTarget: null,
+        cameraStream: null,
+        cameraFrameId: 0,
+        barcodeDetector: null,
+        qrDecoderLoadPromise: null,
+      };
+
+      const statusEl = document.getElementById("status");
+      const leftQrEl = document.getElementById("leftQr");
+      const rightQrEl = document.getElementById("rightQr");
+      const commandPreviewEl = document.getElementById("commandPreview");
+      const cameraPanelEl = document.getElementById("cameraPanel");
+      const cameraVideoEl = document.getElementById("cameraVideo");
+      const cameraCanvasEl = document.getElementById("cameraCanvas");
+
+      function setStatus(text, isWarn) {
+        statusEl.textContent = text;
+        statusEl.className = isWarn ? "status warn" : "status";
+      }
+
+      function buildCommand() {
+        const left = leftQrEl.value.trim();
+        const right = rightQrEl.value.trim();
+        return [COMMAND_PREFIX, left, right].filter(Boolean).join("\n");
+      }
+
+      function updatePreview() {
+        commandPreviewEl.textContent = buildCommand();
+      }
+
+      function loadScript(src, id) {
+        const existing = document.getElementById(id);
+        if (existing && existing.dataset.loaded === "true")
+          return Promise.resolve();
+        if (existing && existing.dataset.loading === "true") {
+          return new Promise((resolve, reject) => {
+            existing.addEventListener("load", resolve, { once: true });
+            existing.addEventListener("error", reject, { once: true });
+          });
+        }
+        if (existing) existing.remove();
+
+        return new Promise((resolve, reject) => {
+          const script = document.createElement("script");
+          let timeoutId = 0;
+          script.id = id;
+          script.src = src;
+          script.async = true;
+          script.dataset.loading = "true";
+
+          script.onload = () => {
+            window.clearTimeout(timeoutId);
+            script.dataset.loaded = "true";
+            script.dataset.loading = "false";
+            resolve();
+          };
+          script.onerror = () => {
+            window.clearTimeout(timeoutId);
+            script.dataset.loading = "false";
+            reject(new Error("載入失敗: " + src));
+          };
+          timeoutId = window.setTimeout(() => {
+            script.dataset.loading = "false";
+            reject(new Error("載入逾時: " + src));
+          }, SCRIPT_TIMEOUT_MS);
+
+          document.head.appendChild(script);
+        });
+      }
+
+      async function ensureQrDecoderLoaded() {
+        if (typeof window.jsQR === "function") return true;
+        if (!state.qrDecoderLoadPromise) {
+          state.qrDecoderLoadPromise = loadScript(JSQR_URL, "jsqr-sdk");
+        }
+        try {
+          await state.qrDecoderLoadPromise;
+          return typeof window.jsQR === "function";
+        } catch (e) {
+          return false;
+        }
+      }
+
+      function isLiffScanAvailable() {
+        return (
+          state.liffReady &&
+          typeof window.liff !== "undefined" &&
+          typeof window.liff.scanCodeV2 === "function" &&
+          (!window.liff.isApiAvailable ||
+            window.liff.isApiAvailable("scanCodeV2"))
+        );
+      }
+
+      async function initLiff() {
+        updatePreview();
+
+        if (!LIFF_ID) {
+          setStatus("未設定 LIFF ID。", true);
+          return;
+        }
+
+        setStatus("等待 LIFF SDK...");
+
+        try {
+          // 等待 SDK 載入
+          for (let i = 0; i < 60; i++) {
+            if (window.liff) {
+              break;
+            }
+
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+
+          if (!window.liff) {
+            throw new Error("LIFF SDK 載入失敗");
+          }
+
+          setStatus("LIFF SDK 已載入，版本：" + window.liff.getVersion());
+
+          console.log("LIFF SDK version =", window.liff.getVersion());
+          console.log("LIFF_ID =", LIFF_ID);
+          console.log("location.href =", location.href);
+          console.log("location.origin =", location.origin);
+
+          setStatus("開始 liff.init()...");
+
+          await window.liff.init({
+            liffId: LIFF_ID,
+          });
+
+          console.log("LIFF init success");
+
+          state.liffReady = true;
+
+          console.log("liff.isInClient() =", window.liff.isInClient());
+
+          console.log("scanCodeV2 function =", typeof window.liff.scanCodeV2);
+
+          console.log(
+            "scanCodeV2 available =",
+            window.liff.isApiAvailable
+              ? window.liff.isApiAvailable("scanCodeV2")
+              : "unknown",
+          );
+
+          setStatus(
+            "LIFF 初始化完成，LINE Client = " + window.liff.isInClient(),
+          );
+        } catch (error) {
+          console.error("LIFF Init Error:", error);
+
+          setStatus(
+            "LIFF 錯誤：" +
+              (error?.code || "") +
+              " " +
+              (error?.message || error),
+            true,
+          );
+        }
+      }
+
+      async function scanQr(target) {
+        if (isLiffScanAvailable()) {
+          try {
+            const result = await window.liff.scanCodeV2();
+            if (result && result.value) {
+              setQrValue(target, result.value);
+            }
+            return;
+          } catch (error) {
+            setStatus("LINE 掃描器未開啟，改用網頁相機...", true);
+          }
+        }
+
+        await startCameraScan(target);
+      }
+
+      function setQrValue(target, value) {
+        target.value = value;
+        updatePreview();
+        stopCameraScan();
+        setStatus("已讀取 QR Code！");
+      }
+
+      async function startCameraScan(target) {
+        // 檢查環境
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          setStatus("錯誤：相機 API 受限，請確認網頁是否已突破沙盒。", true);
+          return;
+        }
+
+        stopCameraScan();
+        state.cameraTarget = target;
+        setStatus("相機啟動中...");
+
+        const jsQROk = await ensureQrDecoderLoaded();
+
+        try {
+          if ("BarcodeDetector" in window) {
+            state.barcodeDetector = new BarcodeDetector({
+              formats: ["qr_code"],
+            });
+          }
+        } catch (e) {
+          state.barcodeDetector = null;
+        }
+
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: "environment" } },
+            audio: false,
+          });
+
+          state.cameraStream = stream;
+          cameraVideoEl.srcObject = stream;
+          cameraPanelEl.hidden = false;
+          await cameraVideoEl.play();
+          setStatus("請對準發票 QR Code");
+          scanCameraFrame();
+        } catch (error) {
+          console.error("Camera Fail:", error);
+          setStatus(`相機啟動失敗 [${error.name}]: ${error.message}`, true);
+        }
+      }
+
+      async function scanCameraFrame() {
+        if (!state.cameraStream || !state.cameraTarget) return;
+
+        const video = cameraVideoEl;
+        if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+          const canvas = cameraCanvasEl;
+          const width = video.videoWidth;
+          const height = video.videoHeight;
+
+          if (width > 0 && height > 0) {
+            canvas.width = width;
+            canvas.height = height;
+            const context = canvas.getContext("2d", {
+              willReadFrequently: true,
+            });
+            context.drawImage(video, 0, 0, width, height);
+
+            const value = await detectQrFromCanvas(
+              canvas,
+              context,
+              width,
+              height,
+            );
+            if (value) {
+              setQrValue(state.cameraTarget, value);
+              return;
+            }
+          }
+        }
+
+        state.cameraFrameId = window.requestAnimationFrame(scanCameraFrame);
+      }
+
+      async function detectQrFromCanvas(canvas, context, width, height) {
+        if (state.barcodeDetector) {
+          try {
+            const codes = await state.barcodeDetector.detect(canvas);
+            if (codes && codes.length > 0 && codes[0].rawValue) {
+              return codes[0].rawValue;
+            }
+          } catch (e) {
+            state.barcodeDetector = null;
+          }
+        }
+
+        if (typeof window.jsQR === "function") {
+          const imageData = context.getImageData(0, 0, width, height);
+          const result = window.jsQR(imageData.data, width, height);
+          if (result && result.data) {
+            return result.data;
+          }
+        }
+        return "";
+      }
+
+      function stopCameraScan() {
+        if (state.cameraFrameId) {
+          window.cancelAnimationFrame(state.cameraFrameId);
+          state.cameraFrameId = 0;
+        }
+        if (state.cameraStream) {
+          state.cameraStream.getTracks().forEach((track) => track.stop());
+          state.cameraStream = null;
+        }
+        state.cameraTarget = null;
+        cameraVideoEl.srcObject = null;
+        cameraPanelEl.hidden = true;
+      }
+
+      async function sendToLine() {
+        const command = buildCommand();
+        if (!leftQrEl.value.trim()) {
+          setStatus("請先讀取或貼上左側 QR。", true);
+          return;
+        }
+
+        if (!state.liffReady || !window.liff.isInClient()) {
+          setStatus("無法直接傳送，請手動點擊「複製指令」。", true);
+          return;
+        }
+
+        try {
+          await window.liff.sendMessages([{ type: "text", text: command }]);
+          window.liff.closeWindow();
+        } catch (error) {
+          setStatus("傳送失敗，請複製指令發送。", true);
+        }
+      }
+
+      async function copyCommand() {
+        const command = buildCommand();
+        if (!command.trim()) return;
+
+        try {
+          await navigator.clipboard.writeText(command);
+          setStatus("已複製至剪貼簿！");
+        } catch (error) {
+          setStatus("請手動選取下方文字複製。", true);
+        }
+      }
+
+      // 事件綁定
+      document
+        .getElementById("scanLeft")
+        .addEventListener("click", () => scanQr(leftQrEl));
+      document
+        .getElementById("scanRight")
+        .addEventListener("click", () => scanQr(rightQrEl));
+      document.getElementById("sendLine").addEventListener("click", sendToLine);
+      document
+        .getElementById("copyCommand")
+        .addEventListener("click", copyCommand);
+      document.getElementById("stopCamera").addEventListener("click", () => {
+        stopCameraScan();
+        setStatus("相機已關閉");
+      });
+      document.getElementById("clearAll").addEventListener("click", () => {
+        stopCameraScan();
+        leftQrEl.value = "";
+        rightQrEl.value = "";
+        updatePreview();
+        setStatus("已清除");
+      });
+      leftQrEl.addEventListener("input", updatePreview);
+      rightQrEl.addEventListener("input", updatePreview);
+
+      initLiff();
+      window.addEventListener("pagehide", stopCameraScan);
+    </script>
+  </body>
+</html>
